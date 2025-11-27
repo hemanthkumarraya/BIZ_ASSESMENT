@@ -10,7 +10,7 @@ from ultralytics import YOLO
 MODEL_PATH = 'glove_1248_best_v0.pt'
 
 # 2. Input folder (where you place your test images)
-INPUT_FOLDER = 'input_images'
+INPUT_FOLDER = 'input'
 
 # 3. Output folders (Matching the required directory structure)
 OUTPUT_IMAGES_FOLDER = 'output' # Annotated images will be saved directly here
@@ -152,4 +152,5 @@ if __name__ == "__main__":
         exit()
         
     # 3. Run the Pipeline
+
     process_batch_detection(model, INPUT_FOLDER, OUTPUT_IMAGES_FOLDER, OUTPUT_LOGS_FOLDER)
