@@ -1,0 +1,15 @@
+{
+    "filename": "GLOVE_task_4 (2).jpg",
+    "detections": [
+        {
+            "label": "gloved_hand",
+            "confidence": 0.868,
+            "bbox": [
+                419.24,
+                1673.47,
+                1637.63,
+                3209.27
+            ]
+        }
+    ]
+}
