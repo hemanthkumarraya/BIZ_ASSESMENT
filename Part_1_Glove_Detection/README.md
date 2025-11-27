@@ -9,13 +9,13 @@ Build a robust object detection system capable of distinguishing **gloved_hand**
 - **Framework:** Ultralytics (PyTorch)  
 - **Input resolution:** 1248 × 1248 (training & inference)  
 - **Final validation performance:** **mAP@0.5 = 0.980**, **mAP@0.5:0.95 = 0.820**  
-- Two inference scripts provided: batch image processing (with CLI) + real-time RTSP/webcam streaming
+- Two inference scripts provided: batch image processing + real-time RTSP/webcam streaming
 
 ## 1. Dataset Name & Source
 - **Custom-collected dataset** (503 high-quality images)  
 - Recorded in multiple real-world scenarios: different lighting conditions, skin tones, glove colors/types (nitrile, leather, fabric), backgrounds, and hand poses  
-- Annotated using Roboflow (bounding boxes + two classes: `GLOVE`, `NO_GLOVE`)  
-- Split: 402 train → 101 validation  
+- Annotated using labelimg (bounding boxes + two classes: `GLOVE`, `NO_GLOVE`)  of about 1600> images
+- For training purpose taken only 503 images with Train and Split: 402 train → 101 validation  
 - Heavy online augmentations enabled by default in YOLOv8 (Mosaic, MixUp, HSV, Flip, Rotation, Scale 0.5–2.0), effectively increasing diversity 10–20× and preventing overfitting despite modest raw image count
 
 ## 2. Model & Training Details
@@ -51,32 +51,47 @@ Build a robust object detection system capable of distinguishing **gloved_hand**
 
 ## 5. How to Run
 
+Ensure you have the following tools installed on your system:
+* **Git** (for cloning the repository)
+* **Python 3.8+**
+
+### Clone the Repository
+
+
+```bash
+# Clone the repository (Replace <YOUR_REPO_URL> with the actual link)
+git clone <YOUR_REPO_URL> Part_1_Glove_Detection
+
+# Navigate into the project directory
+cd Part_1_Glove_Detection
+```
 ### Environment Setup
 ```bash
 pip install ultralytics opencv-python
-
+```
+```
 Part_1_Glove_Detection/
-├── detection_script_img.py      # Batch processing (CLI)
-├── detection_script_live.py     # Real-time RTSP/webcam
+├── detection_img.py             # Batch processing (CLI)
+├── detection_live.py            # Real-time RTSP/webcam
 ├── glove_1248_best_v0.pt        # Trained weights
 ├── input_images/                # Put your test .jpgs here
 ├── output/                      # Annotated images appear here
 ├── logs/                        # JSON logs per image
 └── README.md/                        
-
-
-# Basic usage (uses defaults)
-python detection_script_img.py
-
-# Full control
-python detection_script_img.py \
+```
+```
+# Process the batch wise images which are avalible in the  input folders
+python detection_img.py
+```
+python detection_img.py \
   --input input_images \
   --output output \
   --logs logs \
   --model glove_1248_best_v0.pt \
   --conf 0.35
 
-
-python detection_script_live.py
+```
+#use this for the live RTSP links
+python detection_live.py
 
 ```
