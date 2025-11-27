@@ -1,4 +1,3 @@
-
 import streamlit as st
 from PIL import Image
 import io
@@ -7,7 +6,7 @@ import cv2
 from ultralytics import YOLO
 
 # --- Configuration ---
-MODEL_PATH = 'streamlit_app/glove_1248_best_v1.pt'
+MODEL_PATH = 'glove_1248_best_v0.pt'
 CONFIDENCE_THRESHOLD = 0.50
 CLASS_NAMES = ['bare_hand', 'gloved_hand']
 
@@ -22,30 +21,27 @@ def load_model():
         st.stop()
 
 def run_inference(model, image_data):
-    """Performs inference on the uploaded image."""
+    """
+    Performs inference on the uploaded image.
+    Returns the original image (as a PIL object) and the raw detection results.
+    """
     try:
-        # Predict on the image
+        # Convert BGR (OpenCV format) to RGB for PIL/Streamlit display
+        original_img_rgb = cv2.cvtColor(image_data, cv2.COLOR_BGR2RGB)
+        original_image = Image.fromarray(original_img_rgb)
+        
+        # Predict on the image. We rely on the raw 'results' object for counts 
+        # and do not use the .plot() method, which would draw annotations.
         results = model.predict(
             source=image_data, 
             conf=CONFIDENCE_THRESHOLD, 
             iou=0.5, 
             save=False, 
-            stream=False
+            stream=False,
         )
         
-        # Get the annotated image (converted back to PIL for Streamlit display)
-        if results and results[0] is not None:
-            # The .plot() method returns an annotated NumPy array (BGR format)
-            annotated_img_bgr = results[0].plot()
-            
-            # Convert BGR (OpenCV format) to RGB (PIL/Streamlit format)
-            annotated_img_rgb = cv2.cvtColor(annotated_img_bgr, cv2.COLOR_BGR2RGB)
-            
-            # Convert NumPy array to PIL Image object
-            annotated_image = Image.fromarray(annotated_img_rgb)
-            return annotated_image, results
-        
-        return Image.fromarray(cv2.cvtColor(image_data, cv2.COLOR_BGR2RGB)), []
+        # The results object contains the bounding box and class information
+        return original_image, results
 
     except Exception as e:
         st.error(f"An error occurred during inference: {e}")
@@ -58,7 +54,9 @@ def main():
     st.title("🧤 Hand Protection Detection (YOLOv8)")
     st.markdown("""
         Upload an image below to run the object detection model (`glove_1248_best_v0.pt`). 
-        The application will identify **gloved hands** and **bare hands**.
+        The application will identify **gloved hands** and **bare hands** and provide a compliance summary.
+        
+        **Note:** This application displays the original image without bounding box annotations, focusing only on the detection metrics.
     """)
 
     # Load the model
@@ -70,24 +68,25 @@ def main():
     )
 
     if uploaded_file is not None:
-        # Display the image and run inference
-        
         # Read the uploaded file as a NumPy array (OpenCV format)
         file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
         image_data = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
+        # Show a small preview in the sidebar
         st.sidebar.image(image_data, channels="BGR", caption="Original Image", use_column_width=True)
         st.sidebar.markdown("---")
 
         with st.spinner('Running detection...'):
-            annotated_image, results = run_inference(model, image_data)
+            # Run inference to get the original image and raw results
+            original_image, results = run_inference(model, image_data)
 
-        if annotated_image:
+        if original_image:
             col1, col2 = st.columns([2, 1])
 
             with col1:
-                st.subheader("Detection Results")
-                st.image(annotated_image, caption="Annotated Image", use_column_width=True)
+                st.subheader("Image for Analysis")
+                # Display the original image (without annotations)
+                st.image(original_image, caption="Uploaded Image", use_column_width=True)
 
             with col2:
                 st.subheader("Detection Summary")
@@ -102,21 +101,27 @@ def main():
                     
                     for box in boxes:
                         class_id = int(box.cls[0])
-                        label = CLASS_NAMES[class_id]
                         
-                        if label == 'gloved_hand':
-                            gloved_count += 1
-                        elif label == 'bare_hand':
-                            bare_count += 1
+                        if 0 <= class_id < len(CLASS_NAMES):
+                            label = CLASS_NAMES[class_id]
+                        
+                            if label == 'gloved_hand':
+                                gloved_count += 1
+                            elif label == 'bare_hand':
+                                bare_count += 1
+
 
                 st.metric(label="Total Hands Detected", value=total_detections)
                 st.metric(label="✅ Gloved Hands", value=gloved_count)
                 st.metric(label="⚠️ Bare Hands", value=bare_count)
                 
+                # Compliance check feedback
                 if bare_count > 0:
-                    st.warning("Immediate action required: Bare hands detected.")
+                    st.error("Immediate action required: Bare hands detected (Compliance Failure).")
                 elif total_detections > 0:
-                    st.success("Compliance Check: All detected hands are gloved.")
+                    st.success("Compliance Check: All detected hands are gloved (Success).")
+                else:
+                    st.info("No hands were detected in the image.")
                 
                 st.markdown(f"---")
                 st.caption(f"Confidence Threshold: {CONFIDENCE_THRESHOLD * 100:.0f}%")
