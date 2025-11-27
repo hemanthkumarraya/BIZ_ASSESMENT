@@ -59,8 +59,8 @@ Ensure you have the following tools installed on your system:
 
 
 ```bash
-# Clone the repository (Replace <YOUR_REPO_URL> with the actual link)
-git clone <YOUR_REPO_URL> Part_1_Glove_Detection
+# Clone the repository
+git clone https://github.com/hemanthkumarraya/BIZ_ASSESMENT Part_1_Glove_Detection
 
 # Navigate into the project directory
 cd Part_1_Glove_Detection
