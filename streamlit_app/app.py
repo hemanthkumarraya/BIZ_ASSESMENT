@@ -8,7 +8,7 @@ from ultralytics import YOLO
 # --- Configuration ---
 MODEL_PATH = 'streamlit_app/glove_1248_best_v1.pt'
 CONFIDENCE_THRESHOLD = 0.50
-CLASS_NAMES = ['bare_hand', 'gloved_hand']
+CLASS_NAMES = ['gloved_hand','bare_hand']
 
 @st.cache_resource
 def load_model():
