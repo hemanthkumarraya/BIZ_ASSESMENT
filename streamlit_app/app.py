@@ -7,7 +7,7 @@ import cv2
 from ultralytics import YOLO
 
 # --- Configuration ---
-MODEL_PATH = 'glove_1248_best_v0.pt'
+MODEL_PATH = 'streamlit_app/glove_1248_best_v1.pt'
 CONFIDENCE_THRESHOLD = 0.50
 CLASS_NAMES = ['bare_hand', 'gloved_hand']
 
