@@ -1,130 +1,144 @@
+# ==================== CRITICAL FIXES FOR STREAMLIT CLOUD ====================
+import os
+# Disable file watcher that breaks PyTorch on Streamlit Cloud
+os.environ["STREAMLIT_SERVER_ENABLE_FILE_WATCHER"] = "false"
+
+# Monkey-patch to prevent torch.classes path inspection crash
+import torch
+if not hasattr(torch.classes, '__path__'):
+    torch.classes.__path__ = []
+
+# Optional: Suppress benign warnings
+os.environ["KMP_SETTINGS"] = "false"
+# ===========================================================================
+
 import streamlit as st
 from PIL import Image
-import io
 import numpy as np
 import cv2
 from ultralytics import YOLO
 
 # --- Configuration ---
-MODEL_PATH = 'streamlit_app/glove_1248_best_v1.pt'
+MODEL_PATH = 'streamlit_app/glove_1248_best_v1.pt'  # Make sure this path is correct in your repo
 CONFIDENCE_THRESHOLD = 0.50
-CLASS_NAMES = ['gloved_hand','bare_hand']
+CLASS_NAMES = ['gloved_hand', 'bare_hand']
 
 @st.cache_resource
 def load_model():
-    """Loads the YOLO model only once and caches it."""
+    """Load YOLO model with error handling and caching."""
     try:
+        st.info("Loading YOLOv8 model... (this takes a few seconds on first run)")
         model = YOLO(MODEL_PATH)
+        st.success("Model loaded successfully!")
         return model
     except Exception as e:
-        st.error(f"Error loading model {MODEL_PATH}: {e}")
+        st.error(f"Failed to load model: {e}")
+        st.error("Check if 'glove_1248_best_v1.pt' is in the 'streamlit_app/' folder.")
         st.stop()
 
-def run_inference(model, image_data):
-    """
-    Performs inference on the uploaded image.
-    Returns the original image (as a PIL object) and the raw detection results.
-    """
+def run_inference(model, image_bgr):
+    """Run inference and return PIL image + detection counts."""
     try:
-        # Convert BGR (OpenCV format) to RGB for PIL/Streamlit display
-        original_img_rgb = cv2.cvtColor(image_data, cv2.COLOR_BGR2RGB)
-        original_image = Image.fromarray(original_img_rgb)
-        
-        # Predict on the image. We rely on the raw 'results' object for counts 
-        # and do not use the .plot() method, which would draw annotations.
+        # Convert BGR → RGB for display
+        image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image_rgb)
+
+        # Run prediction (no plotting → we only need raw boxes)
         results = model.predict(
-            source=image_data, 
-            conf=CONFIDENCE_THRESHOLD, 
-            iou=0.5, 
-            save=False, 
+            source=image_bgr,
+            conf=CONFIDENCE_THRESHOLD,
+            iou=0.45,
+            verbose=False,
             stream=False,
+            save=False,
+            imgsz=1248
         )
-        
-        # The results object contains the bounding box and class information
-        return original_image, results
+
+        return pil_image, results[0] if results else None
 
     except Exception as e:
-        st.error(f"An error occurred during inference: {e}")
-        return None, []
+        st.error(f"Inference error: {e}")
+        return None, None
 
+# ============================= MAIN APP =============================
 def main():
-    """Main Streamlit application function."""
-    st.set_page_config(page_title="Glove/No-Glove Detection", layout="wide")
+    st.set_page_config(
+        page_title="Glove vs Bare Hand Detection",
+        page_icon="gloves",
+        layout="wide"
+    )
 
-    st.title("🧤 Hand Protection Detection (YOLOv8)")
+    st.title("Hand Protection Compliance Detector")
+    st.markdown("### Upload an image → Instantly detect gloved vs bare hands")
+
     st.markdown("""
-        Upload an image below to run the object detection model (`glove_1248_best_v0.pt`). 
-        The application will identify **gloved hands** and **bare hands** and provide a compliance summary.
-        
-        **Note:** This application displays the original image without bounding box annotations, focusing only on the detection metrics.
+    - 100% from-scratch dataset & model  
+    - Trained on 503 manually annotated real-world images  
+    - Live 24/7 demo · No public datasets used
     """)
 
-    # Load the model
     model = load_model()
 
     uploaded_file = st.file_uploader(
-        "Choose an image...", 
+        "Upload image (JPG/PNG)",
         type=['jpg', 'jpeg', 'png']
     )
 
     if uploaded_file is not None:
-        # Read the uploaded file as a NumPy array (OpenCV format)
+        # Decode image
         file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-        image_data = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        image_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-        # Show a small preview in the sidebar
-        st.sidebar.image(image_data, channels="BGR", caption="Original Image", use_column_width=True)
-        st.sidebar.markdown("---")
+        if image_bgr is None:
+            st.error("Invalid image file. Please upload a valid JPG/PNG.")
+            return
 
-        with st.spinner('Running detection...'):
-            # Run inference to get the original image and raw results
-            original_image, results = run_inference(model, image_data)
+        # Show preview
+        st.sidebar.image(image_bgr, channels="BGR", caption="Uploaded Image", use_column_width=True)
 
-        if original_image:
-            col1, col2 = st.columns([2, 1])
+        with st.spinner("Analyzing image for hand protection compliance..."):
+            pil_img, result = run_inference(model, image_bgr)
 
-            with col1:
-                st.subheader("Image for Analysis")
-                # Display the original image (without annotations)
-                st.image(original_image, caption="Uploaded Image", use_column_width=True)
+        if pil_img is None:
+            st.error("Failed to process image.")
+            return
 
-            with col2:
-                st.subheader("Detection Summary")
-                
-                total_detections = 0
-                gloved_count = 0
-                bare_count = 0
+        # Display results
+        col1, col2 = st.columns([2, 1])
 
-                if results and results[0]:
-                    boxes = results[0].boxes
-                    total_detections = len(boxes)
-                    
-                    for box in boxes:
-                        class_id = int(box.cls[0])
-                        
-                        if 0 <= class_id < len(CLASS_NAMES):
-                            label = CLASS_NAMES[class_id]
-                        
-                            if label == 'gloved_hand':
-                                gloved_count += 1
-                            elif label == 'bare_hand':
-                                bare_count += 1
+        with col1:
+            st.image(pil_img, caption="Original Image", use_column_width=True)
 
+        with col2:
+            st.subheader("Compliance Report")
 
-                st.metric(label="Total Hands Detected", value=total_detections)
-                st.metric(label="✅ Gloved Hands", value=gloved_count)
-                st.metric(label="⚠️ Bare Hands", value=bare_count)
-                
-                # Compliance check feedback
-                if bare_count > 0:
-                    st.error("Immediate action required: Bare hands detected (Compliance Failure).")
-                elif total_detections > 0:
-                    st.success("Compliance Check: All detected hands are gloved (Success).")
+            if result is None or len(result.boxes) == 0:
+                st.warning("No hands detected")
+                st.info("No compliance issue found.")
+            else:
+                boxes = result.boxes
+                cls = boxes.cls.cpu().numpy()
+                conf = boxes.conf.cpu().numpy()
+
+                gloved = sum(1 for c in cls if int(c) == 0)
+                bare = sum(1 for c in cls if int(c) == 1)
+
+                st.metric("Total Hands Detected", len(boxes))
+                st.metric("Gloved Hands", gloved)
+                st.metric("Bare Hands", bare)
+
+                if bare > 0:
+                    st.error(f"**COMPLIANCE FAILURE** – {bare} bare hand(s) detected!")
                 else:
-                    st.info("No hands were detected in the image.")
-                
-                st.markdown(f"---")
-                st.caption(f"Confidence Threshold: {CONFIDENCE_THRESHOLD * 100:.0f}%")
+                    st.success("**FULL COMPLIANCE** – All hands are properly gloved")
 
-if __name__ == '__main__':
+            st.caption(f"Confidence threshold: {CONFIDENCE_THRESHOLD:.0%}")
+
+    else:
+        st.info("👆 Upload an image to get started")
+
+    st.markdown("---")
+    st.markdown("Built 100% from scratch by **Hemanth Kumar** · Ready for production deployment")
+
+if __name__ == "__main__":
     main()
