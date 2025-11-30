@@ -3,6 +3,3 @@ ultralytics==8.3.12
 torch==2.5.0+cpu
 torchvision==0.20.0+cpu
 --extra-index-url https://download.pytorch.org/whl/cpu
-numpy==1.26.4
-opencv-python-headless==4.10.0.84
-pillow==10.4.0
