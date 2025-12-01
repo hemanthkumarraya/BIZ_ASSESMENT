@@ -1,46 +1,103 @@
 import streamlit as st
 from ultralytics import YOLO
 from PIL import Image
-import torch
+import numpy as np
 
-# Page config
-st.set_page_config(page_title="YOLOv8 Object Detector", layout="centered")
+# --- Configuration ---
+# 1. Path to your trained YOLOv8 model (e.g., in a 'weights' folder)
+MODEL_PATH = 'weights/best.pt' 
 
-st.title("YOLOv8 Live Demo")
-st.caption("Upload an image → get instant object detection (runs 100% on CPU)")
+st.set_page_config(
+    page_title="Hand Safety Compliance Detector",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Force CPU (important for Streamlit Cloud)
-torch.cuda.is_available = lambda : False
-
-# Load model once
+# --- Load Model ---
+# Use st.cache_resource to load the model only once, making the app fast
 @st.cache_resource
-def load_model():
-    # yolov8n = fastest & smallest, perfect for CPU demo
-    return YOLO("yolov8n.pt")
+def load_detection_model(path):
+    # The YOLO model loads class names (GLOVE, NO_GLOVE) from the .pt file
+    model = YOLO(path)
+    return model
 
-model = load_model()
+try:
+    model = load_detection_model(MODEL_PATH)
+except Exception as e:
+    st.error(f"⚠️ Error loading model at {MODEL_PATH}. Ensure the path is correct and the file exists.")
+    st.error(e)
+    st.stop()
 
-# Upload image
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png", "webp"])
+# --- Streamlit UI ---
+st.title("🏭 Safety Compliance: Hand Detection")
+st.subheader("Gloved vs. Bare Hand Monitoring")
+
+st.sidebar.header("Configuration")
+# Confidence slider for user control
+confidence = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.5)
+
+# --- File Uploader ---
+uploaded_file = st.file_uploader("Upload an image (.jpg, .jpeg, .png) for analysis:", 
+                                 type=['jpg', 'jpeg', 'png'])
 
 if uploaded_file is not None:
+    # Convert uploaded file to PIL Image
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-    st.write("Running inference...")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Original Image")
+        st.image(image, caption=uploaded_file.name, use_column_width=True)
 
-    with st.spinner("Detecting objects..."):
-        results = model(image, conf=0.25)[0]  # single image
+    if st.sidebar.button("Run Compliance Check"):
+        with st.spinner('Running object detection...'):
+            # --- Inference ---
+            # iou=0.7 is a standard setting for Non-Maximum Suppression (NMS)
+            results = model.predict(image, conf=confidence, iou=0.7)
+            
+            # Get the annotated image (YOLOv8 plotting returns a BGR NumPy array)
+            res_plotted = results[0].plot() 
+            
+            # Convert BGR to RGB for Streamlit display
+            annotated_image = Image.fromarray(res_plotted[..., ::-1])
 
-    # Show results
-    annotated = results.plot()  # returns numpy array with boxes & labels
-    st.image(annotated, caption="Detection Results", use_column_width=True)
+        with col2:
+            st.subheader("Detected Results")
+            st.image(annotated_image, caption="Compliance Check", use_column_width=True)
+            
+        # --- Display Structured Data ---
+        detections = []
+        boxes = results[0].boxes
+        
+        if len(boxes) > 0:
+            st.markdown("---")
+            st.subheader("Detailed Detection Log (JSON Format)")
+            
+            for box in boxes:
+                # Bounding box in x1, y1, x2, y2 format (pixel coordinates)
+                x1, y1, x2, y2 = [int(i) for i in box.xyxy[0].tolist()]
+                
+                # Confidence score
+                conf = round(box.conf[0].item(), 3)
+                
+                # Class name (which should be 'GLOVE' or 'NO_GLOVE')
+                label = model.names[int(box.cls[0].item())]
+                
+                detections.append({
+                    "label": label, 
+                    "confidence": conf, 
+                    "bbox": [x1, y1, x2, y2]
+                })
 
-    # Show detected classes & confidence
-    if len(results.boxes) > 0:
-        st.success(f"Found {len(results.boxes)} object(s)!")
-        for box in results.boxes:
-            cls = results.names[int(box.cls)]
-            conf = box.conf.item()
-            st.write(f"• {cls}: {conf:.1%}")
-    else:
-        st.info("No objects detected.")
+            # Display a summary table for quick review
+            st.dataframe(detections, use_container_width=True)
+            
+            # Display the exact JSON output required in the assessment
+            with st.expander("View Raw JSON Output"):
+                st.json({
+                    "filename": uploaded_file.name,
+                    "detections": detections
+                })
+        else:
+            st.warning("✅ No hands detected or all detections are below the confidence threshold.")
