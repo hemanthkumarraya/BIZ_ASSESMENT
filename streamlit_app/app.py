@@ -34,7 +34,7 @@ st.subheader("Gloved vs. Bare Hand Monitoring")
 
 st.sidebar.header("Configuration")
 # Confidence slider for user control
-confidence = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.5)
+confidence = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.7)
 
 # --- File Uploader ---
 uploaded_file = st.file_uploader("Upload an image (.jpg, .jpeg, .png) for analysis:", 
