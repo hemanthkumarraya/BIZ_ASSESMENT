@@ -3,9 +3,7 @@ from ultralytics import YOLO
 from PIL import Image
 import numpy as np
 
-# --- Configuration ---
-# 1. Path to your trained YOLOv8 model (e.g., in a 'weights' folder)
-MODEL_PATH = 'weights/best.pt' 
+MODEL_PATH = 'streamlit_app/glove_1248_best_v1.pt' 
 
 st.set_page_config(
     page_title="Hand Safety Compliance Detector",
